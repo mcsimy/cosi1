@@ -1,7 +1,7 @@
 <html>
 <head>
     <style type="text/css"><!--
-    #source_histogram, #source_image {
+    #source_histogram, #source_image, img, canvas {
         border: 1px solid #000;
         cursor: pointer;
         /*float: left;*/
@@ -26,23 +26,12 @@
     <script type="text/javascript"><!--
 
     window.addEventListener('load', function () {
-        var histCanvas = document.getElementById('source_histogram'),
-            histCtx = histCanvas.getContext('2d'),
+        var
+            gradients,
             accuracy = 1,
             plotStyle = 'continuous',// 'discreet',//'continuous',
             plotFill = true,
             plotColors = 'gradient', //'gradient', 'none'
-            gradients = {
-                'red':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
-                'green':   histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
-                'blue':    histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
-                'hue':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
-                'val':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
-                'cyan':    histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
-                'magenta': histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
-                'yellow':  histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
-                'kelvin':  histCtx.createLinearGradient(0, 0, histCanvas.width, 0)
-            },
             colors = {
                 'red':   ['#000', '#f00'],
                 'green': ['#000', '#0f0'],
@@ -64,7 +53,22 @@
 
             imgData = null;
 
-        initHistogram = function () {
+        initHistogram = function (id) {
+            histCanvas = document.getElementById(id)
+            histCtx = histCanvas.getContext('2d')
+
+            gradients = {
+                'red':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'green':   histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'blue':    histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'hue':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'val':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'cyan':    histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'magenta': histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'yellow':  histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'kelvin':  histCtx.createLinearGradient(0, 0, histCanvas.width, 0)
+            }
+
             // Plot defaults
             var grad, color, i, n;
             for (grad in gradients) {
@@ -77,7 +81,9 @@
             }
         };
 
-        calcHist = function (histData) {
+        calcHist = function (histData, id) {
+            histCanvas = document.getElementById(id)
+            histCtx = histCanvas.getContext('2d')
             histCtx.clearRect(0, 0, histCanvas.width, histCanvas.height);
 
             var maxCount = 0
@@ -87,10 +93,13 @@
                 }
             }
 
-            drawHist("val", histData, maxCount);
+            drawHist("val", histData, maxCount, id);
         };
 
-        var drawHist = function (type, vals, maxCount) {
+        var drawHist = function (type, vals, maxCount, id) {
+            histCanvas = document.getElementById(id)
+            histCtx = histCanvas.getContext('2d')
+
             var HISTOGRAM_WIDTH = vals.length
             discreetWidth = Math.round(histCanvas.width / HISTOGRAM_WIDTH)
             var ctxStyle;
@@ -174,26 +183,50 @@
     <title>ЦОСиИ КР1 вариант 7</title>
 </head>
 <body>
-    <div id="message" >Please, select an image</div>
-    <br/>
-    <img src="" id="source_image" width="200" style="display:none;"/>
+    <img src="" id="preview_image" width="320" style="display:none;"/>
     <br/>
     <br/>
 
+    <div id="message" >Please, select an image</div>
+    <br/>
     <input id="source_image_file" type="file"/>
     <button id="upload">Upload</button>
 
-    <p><canvas class="thumb" id="source_histogram" width="640" height="480">Your browser does not have support for Canvas.</canvas></p>
+    <div id="image_panel" style="display:none;">
+        <div style="float: left;">
+            <p>Source Image</p>
+            <p>
+                <img src="" id="source_image" width="320" />
+            </p>
+            <p><canvas class="thumb" id="source_histogram" width="320" height="240">Your browser does not have support for Canvas.</canvas></p>
+
+        </div>
+        <div style="float: left;">
+            <p>Transformed Image</p>
+            <p>
+                <img src="" id="transformed_image" width="320" />
+            </p>
+            <p><canvas class="thumb" id="transformed_histogram" width="320" height="240">Your browser does not have support for Canvas.</canvas></p>
+
+        </div>
+    </div>
 
 
     <script>
+        function refreshImages() {
+            $('#image_panel').show()
+            $('#source_image').attr("src", "/sourceImage?" + Date.now())
+            $('#transformed_image').attr("src", "/transformedImage?" + Date.now())
+        }
+
         function readURL(input) {
             var fileInput = $('#source_image_file')
+//            console.log(fileInput);
             if (fileInput) {
                 var reader = new FileReader();
 
                 reader.onload = function (e) {
-                    $('#source_image').attr('src', e.target.result);
+                    $('#preview_image').attr('src', e.target.result);
                 }
 
                 reader.readAsDataURL(fileInput.prop('files')[0]);
@@ -202,7 +235,8 @@
 
         $("#source_image_file").change(function(){
             readURL(this);
-            $('#source_image').show()
+            $('#preview_image').show()
+            $('#image_panel').hide()
         });
 
         $('#upload').on('click', function() {
@@ -221,8 +255,14 @@
                 success: function(php_script_response){
                     console.log(php_script_response)
                     $("#message").html(php_script_response)
-                    initHistogram()
-                    calcHist(php_script_response.SourceHistogram)
+
+                    initHistogram("source_histogram")
+                    calcHist(php_script_response.SourceHistogram, "source_histogram")
+
+                    initHistogram("transformed_histogram")
+                    calcHist(php_script_response.TransformedHistogram, "transformed_histogram")
+
+                    refreshImages()
                 },
                 error: function(php_script_response){
                     $("#message").html(php_script_response.responseText)

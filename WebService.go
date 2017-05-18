@@ -25,6 +25,7 @@ type errorResponse struct {
 type successResponse struct {
 	Message string
 	SourceHistogram Histogram
+	TransformedHistogram Histogram
 }
 
 //start and init service
@@ -33,6 +34,8 @@ func (service *WebService) Start(listenPort int) error {
 	http.HandleFunc("/", service.Redirect)
 	http.HandleFunc("/index.html", service.ServeInterface)
 	http.HandleFunc("/upload", service.UploadImage)
+	http.HandleFunc("/sourceImage", service.ServeSourceImage)
+	http.HandleFunc("/transformedImage", service.ServeTransformedImage)
 	retVal := http.ListenAndServe(":"+strconv.Itoa(listenPort), nil)
 	return retVal
 }
@@ -44,9 +47,29 @@ func (service *WebService) Redirect(responseWriter http.ResponseWriter, request 
 
 //serve main page request
 func (service *WebService) ServeInterface(responseWriter http.ResponseWriter, request *http.Request) {
-	responseWriter.Header().Set("Content-Type: text/html", "*")
+	responseWriter.Header().Set("Content-Type", "text/html")
 	content, _ := ioutil.ReadFile("index.html")
 	responseWriter.Write(content)
+}
+
+//serve main page request
+func (service *WebService) ServeSourceImage(responseWriter http.ResponseWriter, request *http.Request) {
+	responseWriter.Header().Set("Content-Type","image/png")
+	err := service.ImageTransformer.DumpSourceImage(responseWriter)
+
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+	}
+}
+
+//serve main page request
+func (service *WebService) ServeTransformedImage(responseWriter http.ResponseWriter, request *http.Request) {
+	responseWriter.Header().Set("Content-Type","image/png")
+	err := service.ImageTransformer.DumpTransformedImage(responseWriter)
+
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+	}
 }
 
 //upload processing image
@@ -72,9 +95,24 @@ func (service *WebService) UploadImage(responseWriter http.ResponseWriter, reque
 		return
 	}
 
-	hist, err := service.ImageTransformer.GetSourceHistogram()
+	err = service.ImageTransformer.TransformImage()
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
 
-	service.writeSuccessResponse(responseWriter, successResponse{"OK", hist})
+	hist, err := service.ImageTransformer.GetSourceHistogram()
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
+	transformedHist, err := service.ImageTransformer.GetTransformedHistogram()
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
+
+	service.writeSuccessResponse(responseWriter, successResponse{"OK", hist, transformedHist})
 }
 
 func (service *WebService) writeSuccessResponse(responseWriter http.ResponseWriter, data interface{}) {
@@ -82,11 +120,13 @@ func (service *WebService) writeSuccessResponse(responseWriter http.ResponseWrit
 	if err != nil {
 		log.Fatal("Erorr during writing success respose:", err.Error())
 	}
+	responseWriter.Header().Set("Content-Type","application/json")
 	responseWriter.Write(responseJson)
 }
 
 func (service *WebService) writeErrorResponse(responseWriter http.ResponseWriter, err error) {
 	response := errorResponse{err.Error()}
+	responseWriter.Header().Set("Content-Type","application/json")
 	responseWriter.WriteHeader(http.StatusInternalServerError)
 	responseJson, _ := json.Marshal(response)
 	responseWriter.Write(responseJson)
