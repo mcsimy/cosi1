@@ -1,0 +1,234 @@
+<html>
+<head>
+    <style type="text/css"><!--
+    #source_histogram, #source_image {
+        border: 1px solid #000;
+        cursor: pointer;
+        /*float: left;*/
+        margin-right: 15px;
+        margin-bottom: 15px;
+    }
+
+    #myImg.thumb {
+        max-width: 300px;
+        max-height: 400px;
+    }
+
+    #histogram.thumb {
+        max-width: 300px;
+        max-height: 200px;
+    }
+
+    #runtime { clear: both }
+    --></style>
+
+    <script src="http://code.jquery.com/jquery-1.8.3.js"></script>
+    <script type="text/javascript"><!--
+
+    window.addEventListener('load', function () {
+        var histCanvas = document.getElementById('source_histogram'),
+            histCtx = histCanvas.getContext('2d'),
+            accuracy = 1,
+            plotStyle = 'continuous',// 'discreet',//'continuous',
+            plotFill = true,
+            plotColors = 'gradient', //'gradient', 'none'
+            gradients = {
+                'red':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'green':   histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'blue':    histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'hue':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'val':     histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'cyan':    histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'magenta': histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'yellow':  histCtx.createLinearGradient(0, 0, histCanvas.width, 0),
+                'kelvin':  histCtx.createLinearGradient(0, 0, histCanvas.width, 0)
+            },
+            colors = {
+                'red':   ['#000', '#f00'],
+                'green': ['#000', '#0f0'],
+                'blue':  ['#000', '#00f'],
+                'hue':   [
+                    '#f00',   // 0, Red,       0°
+                    '#ff0',   // 1, Yellow,   60°
+                    '#0f0',   // 2, Green,   120°
+                    '#0ff',   // 3, Cyan,    180°
+                    '#00f',   // 4, Blue,    240°
+                    '#f0f',   // 5, Magenta, 300°
+                    '#f00'],  // 6, Red,     360°
+                'val':     ['#000', '#fff'],
+                'kelvin':  ['#fff', '#000'],
+                'cyan':    ['#000', '#0ff'],
+                'yellow':  ['#000', '#ff0'],
+                'magenta': ['#000', '#f0f']
+            },
+
+            imgData = null;
+
+        initHistogram = function () {
+            // Plot defaults
+            var grad, color, i, n;
+            for (grad in gradients) {
+                color = colors[grad];
+                grad = gradients[grad];
+
+                for (i = 0, n = color.length; i < n; i++) {
+                    grad.addColorStop(i*1/(n-1), color[i]);
+                }
+            }
+        };
+
+        calcHist = function (histData) {
+            histCtx.clearRect(0, 0, histCanvas.width, histCanvas.height);
+
+            var maxCount = 0
+            for (i in histData) {
+                if (histData[i] > maxCount) {
+                    maxCount = histData[i]
+                }
+            }
+
+            drawHist("val", histData, maxCount);
+        };
+
+        var drawHist = function (type, vals, maxCount) {
+            var HISTOGRAM_WIDTH = vals.length
+            discreetWidth = Math.round(histCanvas.width / HISTOGRAM_WIDTH)
+            var ctxStyle;
+
+            if (plotFill || plotStyle === 'discreet') {
+                ctxStyle = 'fillStyle';
+                histCtx.strokeStyle = '#000';
+            } else {
+                ctxStyle = 'strokeStyle';
+            }
+
+            if (plotColors === 'flat') {
+                if (type === 'hue') {
+                    histCtx[ctxStyle] = gradients.hue;
+                } else if (type in colors && type !== 'val~') {
+                    histCtx[ctxStyle] = colors[type][1];
+                } else {
+                    histCtx[ctxStyle] = '#000';
+                }
+
+            } else if (plotColors === 'gradient') {
+                if (type in gradients) {
+                    histCtx[ctxStyle] = gradients[type];
+                } else {
+                    histCtx[ctxStyle] = '#000';
+                }
+            } else if (plotColors === 'none') {
+                histCtx[ctxStyle] = '#000';
+            }
+
+            if (plotStyle === 'continuous') {
+                histCtx.beginPath();
+                histCtx.moveTo(0, histCanvas.height);
+            }
+
+            for (var x, y, i = 0; i < HISTOGRAM_WIDTH; i++) {
+                if (!(i in vals)) {
+                    continue;
+                }
+
+                y = Math.round((vals[i]/maxCount)*histCanvas.height);
+                x = Math.round((i/HISTOGRAM_WIDTH)*histCanvas.width);
+
+                if (plotStyle === 'continuous') {
+                    histCtx.lineTo(x, histCanvas.height - y);
+                } else if (plotStyle === 'discreet') {
+                    if (plotFill) {
+                        histCtx.fillRect(x, histCanvas.height - y, discreetWidth, y);
+                    } else {
+                        histCtx.fillRect(x, histCanvas.height - y, discreetWidth, 2);
+                    }
+                }
+            }
+
+            if (plotStyle === 'continuous') {
+                histCtx.lineTo(x, histCanvas.height);
+                if (plotFill) {
+                    histCtx.fill();
+                }
+                histCtx.stroke();
+                histCtx.closePath();
+            }
+        };
+
+        var thumbClick = function (ev) {
+            ev.preventDefault();
+
+            if (this.className === 'thumb') {
+                this.className = '';
+            } else {
+                this.className = 'thumb';
+            }
+        };
+
+        histCanvas.addEventListener('click', thumbClick, false);
+
+        initHistogram();
+    }, false);
+    // --></script>
+
+    <title>ЦОСиИ КР1 вариант 7</title>
+</head>
+<body>
+    <div id="message" >Please, select an image</div>
+    <br/>
+    <img src="" id="source_image" width="200" style="display:none;"/>
+    <br/>
+    <br/>
+
+    <input id="source_image_file" type="file"/>
+    <button id="upload">Upload</button>
+
+    <p><canvas class="thumb" id="source_histogram" width="640" height="480">Your browser does not have support for Canvas.</canvas></p>
+
+
+    <script>
+        function readURL(input) {
+            var fileInput = $('#source_image_file')
+            if (fileInput) {
+                var reader = new FileReader();
+
+                reader.onload = function (e) {
+                    $('#source_image').attr('src', e.target.result);
+                }
+
+                reader.readAsDataURL(fileInput.prop('files')[0]);
+            }
+        }
+
+        $("#source_image_file").change(function(){
+            readURL(this);
+            $('#source_image').show()
+        });
+
+        $('#upload').on('click', function() {
+            var file_data = $('#source_image_file').prop('files')[0];
+
+            var form_data = new FormData();
+            form_data.append('source_image', file_data);
+            $.ajax({
+                url: '/upload', // point to server-side PHP script
+                dataType: 'json',  // what to expect back from the PHP script, if anything
+                cache: false,
+                contentType: false,
+                processData: false,
+                data: form_data,
+                type: 'post',
+                success: function(php_script_response){
+                    console.log(php_script_response)
+                    $("#message").html(php_script_response)
+                    initHistogram()
+                    calcHist(php_script_response.SourceHistogram)
+                },
+                error: function(php_script_response){
+                    $("#message").html(php_script_response.responseText)
+                }
+            });
+        });
+    </script>
+</body>
+</html>

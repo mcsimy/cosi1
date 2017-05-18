@@ -3,19 +3,36 @@ package main
 import "fmt"
 import "io/ioutil"
 import "net/http"
-import "strconv"
+import (
+	"strconv"
+	"encoding/json"
+	"log"
+)
+
+const MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024
+
 
 
 //main service class
 type WebService struct {
+	ImageTransformer ImageTransformer
+}
 
+type errorResponse struct {
+	Text string		`json:"text"`
+}
+
+type successResponse struct {
+	Message string
+	SourceHistogram Histogram
 }
 
 //start and init service
 func (service *WebService) Start(listenPort int) error {
 	fmt.Println("listening on :" + strconv.Itoa(listenPort))
 	http.HandleFunc("/", service.Redirect)
-	http.HandleFunc("/index.html", service.ServePage)
+	http.HandleFunc("/index.html", service.ServeInterface)
+	http.HandleFunc("/upload", service.UploadImage)
 	retVal := http.ListenAndServe(":"+strconv.Itoa(listenPort), nil)
 	return retVal
 }
@@ -26,9 +43,51 @@ func (service *WebService) Redirect(responseWriter http.ResponseWriter, request 
 }
 
 //serve main page request
-func (service *WebService) ServePage(responseWriter http.ResponseWriter, request *http.Request) {
+func (service *WebService) ServeInterface(responseWriter http.ResponseWriter, request *http.Request) {
 	responseWriter.Header().Set("Content-Type: text/html", "*")
 	content, _ := ioutil.ReadFile("index.html")
 	responseWriter.Write(content)
 }
 
+//upload processing image
+func (service *WebService) UploadImage(responseWriter http.ResponseWriter, request *http.Request) {
+	if request.Method != "POST" {
+		responseWriter.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	request.ParseMultipartForm(MAX_IMAGE_FILE_SIZE)
+	imageFile, _, err := request.FormFile("source_image")
+
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
+
+	defer imageFile.Close()
+
+	err = service.ImageTransformer.LoadSourceImage(imageFile)
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
+
+	hist, err := service.ImageTransformer.GetSourceHistogram()
+
+	service.writeSuccessResponse(responseWriter, successResponse{"OK", hist})
+}
+
+func (service *WebService) writeSuccessResponse(responseWriter http.ResponseWriter, data interface{}) {
+	responseJson, err := json.Marshal(data)
+	if err != nil {
+		log.Fatal("Erorr during writing success respose:", err.Error())
+	}
+	responseWriter.Write(responseJson)
+}
+
+func (service *WebService) writeErrorResponse(responseWriter http.ResponseWriter, err error) {
+	response := errorResponse{err.Error()}
+	responseWriter.WriteHeader(http.StatusInternalServerError)
+	responseJson, _ := json.Marshal(response)
+	responseWriter.Write(responseJson)
+}
