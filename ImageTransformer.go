@@ -12,6 +12,7 @@ import (
 )
 
 const HISTOGRAM_WIDTH = 256
+const FILTER_MASK_RATIO = 0.1
 
 type Histogram [HISTOGRAM_WIDTH]int
 
@@ -19,6 +20,14 @@ type ImageTransformer struct {
 	sourceImage image.Image
 	transformedImage image.Image
 	filteredImage image.Image
+}
+
+type ImageFilterInterface interface {
+	 GetColor(x, y int) (result color.Color, err error)
+}
+
+type PixelTransformerInterface interface {
+	 GetColor(c color.Color) (result color.Color, err error)
 }
 
 func (transformer *ImageTransformer) LoadSourceImage(r io.Reader) error {
@@ -35,53 +44,71 @@ func (transformer *ImageTransformer) LoadSourceImage(r io.Reader) error {
 	return nil
 }
 
-func (transformer *ImageTransformer) TransformImage() error {
-	if transformer.sourceImage == nil {
-		return errors.New("SOurce image not initialized")
-	}
-
-	var err error
-	transformer.transformedImage, err = transformer.getNegativeImage(transformer.sourceImage)
-
-	return err
-}
-
-func (transformer *ImageTransformer) getNegativeImage(sourceImage image.Image) (image.Image, error) {
-	if sourceImage == nil {
-		return nil, errors.New("SourceImage not initialized")
+func (transformer *ImageTransformer) FilterImage(maskSize int) (err error) {
+	var filter ImageFilterInterface
+	filter, err = NewMedianImageFilter(transformer.sourceImage, maskSize)
+	if err != nil {
+		return err
 	}
 
 	resultImage := image.NewRGBA(transformer.sourceImage.Bounds())
-
-	bounds := sourceImage.Bounds()
-
+	bounds := transformer.sourceImage.Bounds()
+	var c color.Color
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			c, _ := color.RGBAModel.Convert(sourceImage.At(x, y)).(color.RGBA)
-
-			c.R = ^c.R
-			c.G = ^c.G
-			c.B = ^c.B
+			if c, err = filter.GetColor(x, y); err != nil {
+				return err
+			}
 			resultImage.Set(x, y, c)
 		}
 	}
 
-	return resultImage, nil
+	transformer.filteredImage = resultImage
+
+	return nil
 }
 
+func (transformer *ImageTransformer) TransformImage()(err error) {
+	if transformer.sourceImage == nil {
+		return errors.New("SOurce image not initialized")
+	}
+
+	resultImage := image.NewRGBA(transformer.sourceImage.Bounds())
+	bounds := transformer.sourceImage.Bounds()
+	var pixelTransformer PixelTransformerInterface = NewNegativeTransformer()
+	var c color.Color
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if c, err = pixelTransformer.GetColor(transformer.sourceImage.At(x, y)); err != nil {
+				return err
+			}
+			resultImage.Set(x, y, c)
+		}
+	}
+
+	transformer.transformedImage = resultImage
+
+	return nil
+}
 
 func (transformer *ImageTransformer) DumpSourceImage(w io.Writer) error {
-	if transformer.sourceImage == nil {
-		return errors.New("Source image not initialized")
-	}
-	return png.Encode(w, transformer.sourceImage);
+	return transformer.DumpImage(transformer.sourceImage, w)
 }
 
 func (transformer *ImageTransformer) DumpTransformedImage(w io.Writer) error {
-	if transformer.transformedImage == nil {
-		return errors.New("Transformed image not initialized")
+	return transformer.DumpImage(transformer.transformedImage, w)
+}
+
+func (transformer *ImageTransformer) DumpFilteredImage(w io.Writer) error {
+	return transformer.DumpImage(transformer.filteredImage, w)
+}
+
+func (transformer *ImageTransformer) DumpImage(targetImage image.Image, w io.Writer) error {
+	if targetImage == nil {
+		return errors.New("target image not initialized")
 	}
-	return png.Encode(w, transformer.transformedImage);
+	return png.Encode(w, targetImage);
 }
 
 func (transformer *ImageTransformer) GetSourceHistogram() (hist Histogram, err error) {
@@ -90,6 +117,10 @@ func (transformer *ImageTransformer) GetSourceHistogram() (hist Histogram, err e
 
 func (transformer *ImageTransformer) GetTransformedHistogram() (hist Histogram, err error) {
 	return transformer.getHistogram(transformer.transformedImage)
+}
+
+func (transformer *ImageTransformer) GetFilteredHistogram() (hist Histogram, err error) {
+	return transformer.getHistogram(transformer.filteredImage)
 }
 
 func (transformer *ImageTransformer) getHistogram(targetImage image.Image) (hist Histogram, err error) {

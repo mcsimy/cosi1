@@ -26,6 +26,7 @@ type successResponse struct {
 	Message string
 	SourceHistogram Histogram
 	TransformedHistogram Histogram
+	FilteredHistogram Histogram
 }
 
 //start and init service
@@ -36,6 +37,7 @@ func (service *WebService) Start(listenPort int) error {
 	http.HandleFunc("/upload", service.UploadImage)
 	http.HandleFunc("/sourceImage", service.ServeSourceImage)
 	http.HandleFunc("/transformedImage", service.ServeTransformedImage)
+	http.HandleFunc("/filteredImage", service.ServeFilteredImage)
 	retVal := http.ListenAndServe(":"+strconv.Itoa(listenPort), nil)
 	return retVal
 }
@@ -72,6 +74,16 @@ func (service *WebService) ServeTransformedImage(responseWriter http.ResponseWri
 	}
 }
 
+//serve main page request
+func (service *WebService) ServeFilteredImage(responseWriter http.ResponseWriter, request *http.Request) {
+	responseWriter.Header().Set("Content-Type","image/png")
+	err := service.ImageTransformer.DumpFilteredImage(responseWriter)
+
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+	}
+}
+
 //upload processing image
 func (service *WebService) UploadImage(responseWriter http.ResponseWriter, request *http.Request) {
 	if request.Method != "POST" {
@@ -80,6 +92,10 @@ func (service *WebService) UploadImage(responseWriter http.ResponseWriter, reque
 	}
 
 	request.ParseMultipartForm(MAX_IMAGE_FILE_SIZE)
+
+	maskSizeString := request.FormValue("mask_size")
+	maskSize, _ := strconv.Atoi(maskSizeString)
+
 	imageFile, _, err := request.FormFile("source_image")
 
 	if err != nil {
@@ -89,30 +105,44 @@ func (service *WebService) UploadImage(responseWriter http.ResponseWriter, reque
 
 	defer imageFile.Close()
 
-	err = service.ImageTransformer.LoadSourceImage(imageFile)
-	if err != nil {
+	if err = service.ImageTransformer.LoadSourceImage(imageFile); err != nil {
 		service.writeErrorResponse(responseWriter, err)
 		return
 	}
 
-	err = service.ImageTransformer.TransformImage()
-	if err != nil {
+	if err = service.ImageTransformer.TransformImage(); err != nil {
 		service.writeErrorResponse(responseWriter, err)
 		return
 	}
 
-	hist, err := service.ImageTransformer.GetSourceHistogram()
-	if err != nil {
-		service.writeErrorResponse(responseWriter, err)
-		return
-	}
-	transformedHist, err := service.ImageTransformer.GetTransformedHistogram()
-	if err != nil {
+	if err = service.ImageTransformer.FilterImage(maskSize); err != nil {
 		service.writeErrorResponse(responseWriter, err)
 		return
 	}
 
-	service.writeSuccessResponse(responseWriter, successResponse{"OK", hist, transformedHist})
+	var hist, transformedHist, filteredHist Histogram
+
+	if hist, err = service.ImageTransformer.GetSourceHistogram(); err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
+	if transformedHist, err = service.ImageTransformer.GetTransformedHistogram(); err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
+	if filteredHist, err = service.ImageTransformer.GetFilteredHistogram(); err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
+
+	response := successResponse{
+		Message: "OK",
+		SourceHistogram: hist,
+		TransformedHistogram: transformedHist,
+		FilteredHistogram: filteredHist,
+	}
+
+	service.writeSuccessResponse(responseWriter, response)
 }
 
 func (service *WebService) writeSuccessResponse(responseWriter http.ResponseWriter, data interface{}) {
