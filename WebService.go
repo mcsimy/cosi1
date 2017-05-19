@@ -27,6 +27,7 @@ type successResponse struct {
 	SourceHistogram Histogram
 	TransformedHistogram Histogram
 	FilteredHistogram Histogram
+	ImprovedHistogram Histogram
 }
 
 //start and init service
@@ -38,6 +39,7 @@ func (service *WebService) Start(listenPort int) error {
 	http.HandleFunc("/sourceImage", service.ServeSourceImage)
 	http.HandleFunc("/transformedImage", service.ServeTransformedImage)
 	http.HandleFunc("/filteredImage", service.ServeFilteredImage)
+	http.HandleFunc("/improvedImage", service.ServeImprovedImage)
 	retVal := http.ListenAndServe(":"+strconv.Itoa(listenPort), nil)
 	return retVal
 }
@@ -75,6 +77,16 @@ func (service *WebService) ServeTransformedImage(responseWriter http.ResponseWri
 }
 
 //serve main page request
+func (service *WebService) ServeImprovedImage(responseWriter http.ResponseWriter, request *http.Request) {
+	responseWriter.Header().Set("Content-Type","image/png")
+	err := service.ImageTransformer.DumpImprovedImage(responseWriter)
+
+	if err != nil {
+		service.writeErrorResponse(responseWriter, err)
+	}
+}
+
+//serve main page request
 func (service *WebService) ServeFilteredImage(responseWriter http.ResponseWriter, request *http.Request) {
 	responseWriter.Header().Set("Content-Type","image/png")
 	err := service.ImageTransformer.DumpFilteredImage(responseWriter)
@@ -93,8 +105,9 @@ func (service *WebService) UploadImage(responseWriter http.ResponseWriter, reque
 
 	request.ParseMultipartForm(MAX_IMAGE_FILE_SIZE)
 
-	maskSizeString := request.FormValue("mask_size")
-	maskSize, _ := strconv.Atoi(maskSizeString)
+	maskSize, _ := strconv.Atoi(request.FormValue("mask_size"))
+	brightnessPercentage, _ := strconv.Atoi(request.FormValue("brightness_percentage"))
+	contrastPercentage, _ := strconv.Atoi(request.FormValue("contrast_percentage"))
 
 	imageFile, _, err := request.FormFile("source_image")
 
@@ -120,7 +133,12 @@ func (service *WebService) UploadImage(responseWriter http.ResponseWriter, reque
 		return
 	}
 
-	var hist, transformedHist, filteredHist Histogram
+	if err = service.ImageTransformer.ImproveImage(brightnessPercentage, contrastPercentage); err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
+
+	var hist, transformedHist, filteredHist, improvedHist Histogram
 
 	if hist, err = service.ImageTransformer.GetSourceHistogram(); err != nil {
 		service.writeErrorResponse(responseWriter, err)
@@ -134,12 +152,17 @@ func (service *WebService) UploadImage(responseWriter http.ResponseWriter, reque
 		service.writeErrorResponse(responseWriter, err)
 		return
 	}
+	if improvedHist, err = service.ImageTransformer.GetImprovedHistogram(); err != nil {
+		service.writeErrorResponse(responseWriter, err)
+		return
+	}
 
 	response := successResponse{
 		Message: "OK",
 		SourceHistogram: hist,
 		TransformedHistogram: transformedHist,
 		FilteredHistogram: filteredHist,
+		ImprovedHistogram: improvedHist,
 	}
 
 	service.writeSuccessResponse(responseWriter, response)

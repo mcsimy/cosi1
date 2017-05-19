@@ -191,31 +191,41 @@
     <br/>
     File: <input id="source_image_file" type="file"/> <br /><br />
     Mask size: <input id="filter_mask_size" type="text" width="2" value="3"/> <br /><br />
+    Brightness percentage: <input id="brightness_percentage" type="text" width="2" value="0"/>% <br /><br />
+    Contrast percentage: <input id="contrast_percentage" type="text" width="2" value="0"/>% <br /><br />
     <button id="upload">Upload</button>
 
     <div id="image_panel" style="display:none;">
         <div style="float: left;">
             <p>Source Image</p>
             <p>
-                <img src="" id="source_image" width="320" />
+                <img src="" id="source_image" width="300" />
             </p>
-            <p><canvas class="thumb" id="source_histogram" width="320" height="240">Your browser does not have support for Canvas.</canvas></p>
+            <p><canvas class="thumb" id="source_histogram" width="300" height="240">Your browser does not have support for Canvas.</canvas></p>
 
         </div>
         <div style="float: left;">
             <p>Transformed Image</p>
             <p>
-                <img src="" id="transformed_image" width="320" />
+                <img src="" id="transformed_image" width="300" />
             </p>
-            <p><canvas class="thumb" id="transformed_histogram" width="320" height="240">Your browser does not have support for Canvas.</canvas></p>
+            <p><canvas class="thumb" id="transformed_histogram" width="300" height="240">Your browser does not have support for Canvas.</canvas></p>
 
         </div>
         <div style="float: left;">
             <p>Median Filtered Image</p>
             <p>
-                <img src="" id="filtered_image" width="320" />
+                <img src="" id="filtered_image" width="300" />
             </p>
-            <p><canvas class="thumb" id="filtered_histogram" width="320" height="240">Your browser does not have support for Canvas.</canvas></p>
+            <p><canvas class="thumb" id="filtered_histogram" width="300" height="240">Your browser does not have support for Canvas.</canvas></p>
+
+        </div>
+        <div style="float: left;">
+            <p>Improved Image</p>
+            <p>
+                <img src="" id="improved_image" width="300" />
+            </p>
+            <p><canvas class="thumb" id="improved_histogram" width="300" height="240">Your browser does not have support for Canvas.</canvas></p>
 
         </div>
     </div>
@@ -227,6 +237,7 @@
             $('#source_image').attr("src", "/sourceImage?" + Date.now())
             $('#transformed_image').attr("src", "/transformedImage?" + Date.now())
             $('#filtered_image').attr("src", "/filteredImage?" + Date.now())
+            $('#improved_image').attr("src", "/improvedImage?" + Date.now())
         }
 
         function readURL(input) {
@@ -251,10 +262,11 @@
 
         $('#upload').on('click', function() {
             var file_data = $('#source_image_file').prop('files')[0];
-            var mask_size = $('#filter_mask_size').val();
 
             var form_data = new FormData();
-            form_data.append('mask_size', mask_size);
+            form_data.append('mask_size', $('#filter_mask_size').val());
+            form_data.append('contrast_percentage', $('#contrast_percentage').val());
+            form_data.append('brightness_percentage', $('#brightness_percentage').val());
             form_data.append('source_image', file_data);
             $.ajax({
                 url: '/upload', // point to server-side PHP script
@@ -276,6 +288,9 @@
 
                     initHistogram("filtered_histogram")
                     calcHist(php_script_response.FilteredHistogram, "filtered_histogram")
+
+                    initHistogram("improved_histogram")
+                    calcHist(php_script_response.ImprovedHistogram, "improved_histogram")
 
                     refreshImages()
                 },

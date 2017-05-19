@@ -9,6 +9,7 @@ import (
 	"errors"
 	"image/png"
 	"image/color"
+	"math"
 )
 
 const HISTOGRAM_WIDTH = 256
@@ -20,6 +21,7 @@ type ImageTransformer struct {
 	sourceImage image.Image
 	transformedImage image.Image
 	filteredImage image.Image
+	improvedImage image.Image
 }
 
 type ImageFilterInterface interface {
@@ -92,12 +94,49 @@ func (transformer *ImageTransformer) TransformImage()(err error) {
 	return nil
 }
 
+func (transformer *ImageTransformer) ImproveImage(brightnessPercentage, contrastPercentage int)(err error) {
+	if transformer.sourceImage == nil {
+		return errors.New("SOurce image not initialized")
+	}
+
+	brightnessRatio := float64(brightnessPercentage) / 100
+	brightnessRatio = math.Max(-1, brightnessRatio)
+	brightnessRatio = math.Min(1, brightnessRatio)
+
+	contrastRatio := float64((100 + float64(contrastPercentage)) / 200)
+	contrastRatio = math.Max(0, contrastRatio)
+	contrastRatio = math.Min(1, contrastRatio)
+
+
+	resultImage := image.NewRGBA(transformer.sourceImage.Bounds())
+	bounds := transformer.sourceImage.Bounds()
+	var pixelTransformer PixelTransformerInterface = NewBrightnessContrastTransformer(brightnessRatio, contrastRatio)
+	var c color.Color
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if c, err = pixelTransformer.GetColor(transformer.sourceImage.At(x, y)); err != nil {
+				return err
+			}
+			resultImage.Set(x, y, c)
+		}
+	}
+
+	transformer.improvedImage = resultImage
+
+	return nil
+}
+
 func (transformer *ImageTransformer) DumpSourceImage(w io.Writer) error {
 	return transformer.DumpImage(transformer.sourceImage, w)
 }
 
 func (transformer *ImageTransformer) DumpTransformedImage(w io.Writer) error {
 	return transformer.DumpImage(transformer.transformedImage, w)
+}
+
+func (transformer *ImageTransformer) DumpImprovedImage(w io.Writer) error {
+	return transformer.DumpImage(transformer.improvedImage, w)
 }
 
 func (transformer *ImageTransformer) DumpFilteredImage(w io.Writer) error {
@@ -121,6 +160,10 @@ func (transformer *ImageTransformer) GetTransformedHistogram() (hist Histogram, 
 
 func (transformer *ImageTransformer) GetFilteredHistogram() (hist Histogram, err error) {
 	return transformer.getHistogram(transformer.filteredImage)
+}
+
+func (transformer *ImageTransformer) GetImprovedHistogram() (hist Histogram, err error) {
+	return transformer.getHistogram(transformer.improvedImage)
 }
 
 func (transformer *ImageTransformer) getHistogram(targetImage image.Image) (hist Histogram, err error) {
